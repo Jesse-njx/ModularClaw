@@ -1,0 +1,9 @@
+{
+  "name": "cli",
+  "version": "1.0.0",
+  "description": "Command-line interface module for user input",
+  "settings": {
+    "prompt": ">>> ",
+    "echo": true
+  }
+}

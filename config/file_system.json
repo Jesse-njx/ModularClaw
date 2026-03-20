@@ -1,0 +1,19 @@
+{
+  "name": "file_system",
+  "version": "1.0.0",
+  "description": "File system module with read and edit actions",
+  "prompt": "File system tool (ModularClaw)\n\nWhen you need to read or edit a file, include a JSON object like this:\n\n{\"type\": \"tool_call\", \"name\": \"edit_file\", \"arguments\": {\"action\": \"read\", \"path\": \"notes.txt\"}}\n\nSupported actions:\n- read: read a file. Args: path, optional max_chars (default 12000)\n- write: create or overwrite a file. Args: path, content\n- append: add text to the end of a file. Args: path, content\n- replace: replace first matching text. Args: path, old_text, new_text\n\nRules:\n- Use project-relative paths (example: docs/notes.md).\n- Send one edit_file JSON object at a time.\n- Wait for the tool_result before assuming the change is complete.",
+  "path_policy": {
+    "allow_read_all_system": true,
+    "write_scope": "workspace",
+    "workspace_root": "",
+    "project_root": ""
+  },
+  "supported_tools": [
+    {
+      "name": "edit_file",
+      "description": "Read, write, append, or replace file content",
+      "required_args": ["action", "path"]
+    }
+  ]
+}

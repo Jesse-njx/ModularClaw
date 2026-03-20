@@ -1,0 +1,9 @@
+{
+  "name": "web",
+  "version": "1.0.0",
+  "description": "Web status page module",
+  "server": {
+    "host": "localhost",
+    "port": 8080
+  }
+}

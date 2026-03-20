@@ -1,0 +1,50 @@
+{
+  "id": "1773904364394",
+  "version": "1.0.0",
+  "context": [
+    {
+      "type": "Text",
+      "data": "Hello. Testing systems"
+    },
+    {
+      "type": "Text",
+      "data": "\nHello! I'm here and ready to help. What would you like to test or discuss today?"
+    },
+    {
+      "type": "Text",
+      "data": "Can you explain integration in calculus for me? Try keeping it short"
+    }
+  ],
+  "status_list": {
+    "logger": {
+      "Ready to send": "ready"
+    },
+    "executor": {
+      "Ready to send": "ready"
+    },
+    "cli": {
+      "Ready to send": "ready",
+      "user_message_ready": true
+    },
+    "web": {
+      "Ready to send": "ready"
+    }
+  },
+  "logs": [
+    "[1773904364] [SYSTEM] CLI session started",
+    "[1773904364] [NEWLOOP] Starting loop 1/5 for session 1773904364394",
+    "[1773904364] [BROADCAST] [sender] Waiting for confirmation to send",
+    "[1773904374] [CLI] Added user message to session",
+    "[1773904374] [sender] All modules ready, sending to AI...",
+    "[1773904374] [sender] Prepared 1 messages for AI",
+    "[1773904383] [sender] Response status: 200",
+    "[1773904383] [sender] Received AI response",
+    "[1773904383] [NEWLOOP] Starting loop 2/5 for session 1773904364394",
+    "[1773904383] [BROADCAST] [sender] Waiting for confirmation to send",
+    "[1773904469] [CLI] Added user message to session"
+  ],
+  "claimed_regions": {},
+  "loop_count": 2,
+  "tick_count": 5322,
+  "need_loop": true
+}

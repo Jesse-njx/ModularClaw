@@ -1,0 +1,15 @@
+{
+  "name": "system",
+  "version": "1.0.0",
+  "description": "ModularClaw system configuration",
+  "runtime": {
+    "tick_interval": 0.1,
+    "max_sessions": 100,
+    "ticks_per_loop": 99999,
+    "max_loops": 5
+  },
+  "session": {
+    "max_context_items": 1000,
+    "max_logs": 5000
+  }
+}
