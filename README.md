@@ -4,7 +4,7 @@
 
 This is a minimalistic agentic AI platform. The core code is well under 300 lines, along with some sample modules that run the whole baseline system. 
 
-This system is made for educational purposes. It is definitely not the best system out there for actual work.
+This system is made for educational purposes. It is definitely not the best system out there for actual work. But, it might reach a higher potential if higher quality modules are written.
 
 This document is typed manually by a human. It's optimized for readability and intuition. If you want a more technical/detailed description of what everything does, read `/docs`.
 
@@ -48,6 +48,8 @@ Looping: A new loop starts at session start and after each sender completion (`R
 At a high level, modules interact, process context, and do non-LLM work. When modules are done, they mark `"Ready to send"` as `"ready"` (for example, `session.set_status(self.name, "Ready to send", "ready")`). At least one module must also trigger `session.set_need_loop(True)`. Then `sender` sees the trigger, verifies other modules are ready, sends `context` to the model, and appends the model result back into `context` (with automatic JSON segment detection).
 
 Many status and context conventions are not strictly enforced by the runtime. Follow conventions consistently and avoid directly interfering with another module's claimed work.
+
+To prevent modules fighting over the same piece of text, a module is capable of claiming a text. For example, claim context item `i` with `session.claim_region(i, self.name)`, then finish with `session.mark_claimed_region_finished(i, self.name)` after updating it.
 
 # Building your first module
 
