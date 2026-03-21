@@ -1,6 +1,6 @@
 import json
-import time
-from core import Module, Runtime
+import re
+from core import Module
 from config_loader import Config
 from session import Session
 
@@ -99,6 +99,57 @@ def _split_response_into_segments(text: str) -> list[tuple[str, str]]:
     return merged
 
 
+def _strip_markdown_json_fences(text: str) -> str:
+    """Unwrap ``` / ```json fenced blocks so balanced `{...}` scanners see tool JSON."""
+
+    def repl(m: re.Match) -> str:
+        return "\n" + m.group(1).strip() + "\n"
+
+    return re.sub(r"```(?:json)?\s*\r?\n?([\s\S]*?)```", repl, text, flags=re.IGNORECASE)
+
+
+def _fallback_tool_call_json_spans(text: str) -> list[str]:
+    """If the model buried tool JSON in prose or fences confused the main splitter, recover tool_call objects."""
+    known = frozenset({"edit_file", "execute_command", "user_input"})
+    found: list[str] = []
+    i = 0
+    while i < len(text):
+        j = text.find("{", i)
+        if j < 0:
+            break
+        span = _json_value_span(text, j)
+        if span is None:
+            i = j + 1
+            continue
+        start, end = span
+        candidate = text[start:end]
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            i = j + 1
+            continue
+        if (
+            isinstance(data, dict)
+            and data.get("type") == "tool_call"
+            and data.get("name") in known
+        ):
+            found.append(candidate)
+            i = end
+        else:
+            i = j + 1
+    return found
+
+
+def _segment_model_response(raw: str) -> list[tuple[str, str]]:
+    """Split assistant output into text vs executable tool JSON (with fence + recovery passes)."""
+    normalized = _strip_markdown_json_fences(raw)
+    segments = _split_response_into_segments(normalized)
+    if not any(kind == "json" for kind, _ in segments):
+        for blob in _fallback_tool_call_json_spans(normalized):
+            segments.append(("json", blob))
+    return segments
+
+
 class Sender(Module):
     VERSION = "1.0.0"
 
@@ -112,8 +163,20 @@ class Sender(Module):
         self.timeout = api_config.get("timeout", 30)
         self.temperature = api_config.get("temperature", 0.7)
         self.max_tokens = api_config.get("max_tokens", 2048)
-        
+        sender_sp = (Config.get("sender", "system_prompt", "") or "").strip()
+        system_sp = (Config.get("system", "system_prompt", "") or "").strip()
+        self.system_prompt = "\n\n".join(p for p in (sender_sp, system_sp) if p)
+        self._user_input_tool_prompt = (Config.get("sender", "user_input_tool_prompt", "") or "").strip()
+
         self.pending_confirmation = False
+
+    def on_session_start(self, session: Session):
+        if self.system_prompt:
+            session.add_context("SystemText", self.system_prompt)
+            session.append_log(f"[{self.name}] Added system prompt to session context")
+        if self._user_input_tool_prompt:
+            session.add_context("SystemText", self._user_input_tool_prompt)
+            session.append_log(f"[{self.name}] Added user_input tool instructions to session context")
 
     def on_loop(self, session: Session):
         self.runtime.broadcast(f"[{self.name}] Waiting for confirmation to send", session.id)
@@ -121,9 +184,6 @@ class Sender(Module):
         self.runtime.emit("sender_waiting", session.id)
 
     def on_tick(self, session: Session):
-        if not session.needs_loop():
-            return
-
         all_ready = True
         for module_name, module in self.runtime.modules.items():
             if module_name == self.name:
@@ -138,18 +198,23 @@ class Sender(Module):
     def _send_to_ai(self, session: Session):
         # Consume the trigger before sending so future sends require fresh work.
         self.pending_confirmation = False
-        session.set_need_loop(False)
         session.append_log(f"[{self.name}] All modules ready, sending to AI...")
         
         messages = []
         for ctx in session.get_context():
-            if ctx.get("type") == "Text" or ctx.get("type") == "ProtectedText":
-                role = "user" if ctx.get("type") == "Text" else "assistant"
+            t = ctx.get("type")
+            if t in ("Text", "UserText", "ProtectedText", "SystemText"):
+                if t in ("Text", "UserText"):
+                    role = "user"
+                elif t == "ProtectedText":
+                    role = "assistant"
+                else:
+                    role = "system"
                 messages.append({
                     "role": role,
                     "content": ctx["data"]
                 })
-            elif ctx.get("type") == "ToolResult":
+            elif t == "ToolResult":
                 messages.append({
                     "role": "tool",
                     "content": ctx["data"]
@@ -158,9 +223,10 @@ class Sender(Module):
         session.append_log(f"[{self.name}] Prepared {len(messages)} messages for AI")
 
         response = self._call_api(messages, session)
-        
+
         if response:
-            segments = _split_response_into_segments(response)
+            segments = _segment_model_response(response)
+            ctx_before = len(session.get_context())
             if not segments:
                 session.add_context("Text", response)
             else:
@@ -169,9 +235,42 @@ class Sender(Module):
                         session.add_context("Text", chunk, label="json")
                     else:
                         session.add_context("Text", chunk)
+            self._resolve_user_input_tool_calls(session, ctx_before)
             n_seg = len(segments) if segments else 1
             session.append_log(f"[{self.name}] Received AI response ({n_seg} segment(s))")
             self.runtime.newloop(session)
+
+    def _resolve_user_input_tool_calls(self, session: Session, index_start: int):
+        """Turn synthetic user_input tool_call JSON into ToolResult and block dispatch until CLI input."""
+        ctx = session.get_context()
+        for i in range(index_start, len(ctx)):
+            item = ctx[i]
+            if item.get("type") != "Text" or item.get("label") != "json":
+                continue
+            try:
+                data = json.loads(item["data"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            if data.get("type") != "tool_call" or data.get("name") != "user_input":
+                continue
+            args = data.get("arguments") or {}
+            prompt = args.get("prompt") or args.get("message") or ""
+            payload = {
+                "type": "tool_result",
+                "tool": "user_input",
+                "ok": True,
+                "message": "Awaiting user input in the CLI.",
+                "prompt": prompt,
+            }
+            item["data"] = json.dumps(payload)
+            item["type"] = "ToolResult"
+            item.pop("label", None)
+            session.awaiting_user_input = True
+            session.append_log(
+                f"[{self.name}] user_input tool: CLI will not report ready until user sends a message"
+            )
 
     def _call_api(self, messages: list, session: Session) -> str:
         if not self.api_key:

@@ -1,6 +1,6 @@
 # Sender 模块（`modules/sender.py`）
 
-`Sender` 是负责调用聊天 API 的模块（若未设置 API key，则返回一段模拟字符串）。它**不是**单纯按固定计时器发送：只有当会话请求新一轮循环，且所有*其他*已注册模块都报告“可发送”时，它才会尝试发送。
+`Sender` 是负责调用聊天 API 的模块（若未设置 API key，则返回一段模拟字符串）。它**不是**单纯按固定计时器发送：每个 tick 内，只要所有*其他*模块的 **`Ready to send`** 均为 **`"ready"`**，且自身的 **`pending_confirmation`** 已上闩，就会尝试发送；不再使用单独的 dispatch 布尔标记。
 
 本页解释该门控机制如何工作，以及**你自己的模块如何与 `Sender` 协作或阻塞它**。
 
@@ -20,30 +20,9 @@ session.get_status(<该模块名称>, "Ready to send")
 
 ---
 
-## 两个开关：`NeedLoop` 与 `Ready to send`
+## 门控：`Ready to send` 与 `session.awaiting_user_input`
 
-### 1. `session.set_need_loop(True)`
-
-在 `on_tick` 中，如果 `session.needs_loop()` 为 false，`Sender` 会**直接返回**：
-
-```124:125:modules/sender.py
-        if not session.needs_loop():
-            return
-```
-
-所以如果没有任何逻辑把 `NeedLoop` 设为 true，`Sender` 连“就绪检查”都不会做。典型模式是：当用户输入或后续工作需要触发 AI 调用时，某处调用 `session.set_need_loop(True)`（例如 CLI 模块在加入用户消息后会这样做）。
-
-发送成功后，`Sender` 会清除此标记：
-
-```139:141:modules/sender.py
-        # Consume the trigger before sending so future sends require fresh work.
-        self.pending_confirmation = False
-        session.set_need_loop(False)
-```
-
-**如何干预：** 如果你想在准备好之前阻止发送，就保持 `NeedLoop` 为 false。若要允许进入就绪检查，在前置工作完成后设为 true。
-
-### 2. `Ready to send` 状态（按模块分别维护）
+### 1. `Ready to send` 状态（按模块分别维护）
 
 对 runtime 中其他每个模块，`Sender` 要求：
 
@@ -60,13 +39,21 @@ session.get_status(module_name, "Ready to send") == "ready"
 
 你可以在同一模块命名空间下使用额外状态键（`set_status(self.name, "something_else", ...)`）实现自己的逻辑；除非你同时影响 `"Ready to send"`，否则不会影响该门控。
 
+**CLI**：在 context 中尚无 **`UserText`** 时保持 **`"pending"`**；在 **`user_input`** 工具后 **`session.awaiting_user_input`** 为真时也保持 **`"pending"`**，直到用户再输入。
+
+### 2. `session.awaiting_user_input`
+
+模型发出 **`user_input`** 工具时，`Sender` 转为 `ToolResult` 并置 **`awaiting_user_input = True`**。`Sender` 不直接读该标记；**CLI** 通过 **`Ready to send == "pending"`** 阻止发送，直到用户输入。
+
+说明文案见 **`config/sender.json`** 的 **`user_input_tool_prompt`**。
+
 ---
 
 ## `pending_confirmation`（内部闩锁）
 
 每次 `on_loop` 时，`Sender` 都会设置 `self.pending_confirmation = True`，并广播 / 发出事件：
 
-```118:121:modules/sender.py
+```181:184:modules/sender.py
     def on_loop(self, session: Session):
         self.runtime.broadcast(f"[{self.name}] Waiting for confirmation to send", session.id)
         self.pending_confirmation = True
@@ -75,9 +62,9 @@ session.get_status(module_name, "Ready to send") == "ready"
 
 真正发送仅在 **`all_ready and self.pending_confirmation`** 时执行。`_send_to_ai` 启动后会把 `pending_confirmation = False`，因此在下一次 `on_loop` 再次“上闩”前，不会触发下一次发送。
 
-**实际效果：** 即便全部状态都是 `"ready"`，也需要一次**新循环**（来自 `runtime.newloop(session)`）来重新上闩。其他模块通常通过调用 `set_need_loop(True)` 并让 runtime 开新循环来驱动这件事；而最近一次成功发送本身也会调用 `newloop`。
+**实际效果：** 即便全部状态都是 `"ready"`，也需要一次**新循环**（来自 `runtime.newloop(session)`）来重新设置 `pending_confirmation`。最近一次成功发送会调用 `newloop`；下一 tick 起，只要各模块（含 CLI）再次全部为 **`"ready"`**（例如工具已跑完），`Sender` 会立即发送。
 
-**外部如何干预：** 可通过 `runtime.register_callback("sender_waiting", your_fn)` 订阅事件。回调会收到 `session_id`，可用于 UI 协调、日志记录或在下一 tick 前调整状态。若不修改/继承 `Sender`，无法直接从外部设置 `pending_confirmation`——应通过 **`NeedLoop`** 和 **`Ready to send`** 来控制。
+**外部如何干预：** 可通过 `runtime.register_callback("sender_waiting", your_fn)` 订阅事件。回调会收到 `session_id`。无法从外部直接设置 `pending_confirmation`——应通过 **`Ready to send`**（以及 CLI / `awaiting_user_input`）协作。
 
 ---
 
@@ -87,7 +74,8 @@ session.get_status(module_name, "Ready to send") == "ready"
 
 | Context `type`        | 消息中的角色                           |
 |-----------------------|----------------------------------------|
-| `Text`                | `user`                                 |
+| `Text`、`UserText`    | `user`                                 |
+| `SystemText`          | `system`                               |
 | `ProtectedText`       | `assistant`                            |
 | `ToolResult`          | `tool`（`content = data`）             |
 
@@ -105,7 +93,7 @@ session.get_status(module_name, "Ready to send") == "ready"
 
 ## 配置入口
 
-构造函数会从 `Config.get("sender", "api", {})` 读取默认配置：API URL、模型、超时、temperature、max tokens、key。缺少 key 时会走模拟文本而不是 HTTP 请求。
+构造函数会从 `Config.get("sender", "api", {})` 读取默认配置：API URL、模型、超时、temperature、max tokens、key。缺少 key 时会走模拟文本而不是 HTTP 请求。**`user_input_tool_prompt`** 与 **`system_prompt`** 来自 `config/sender.json`；**`system.system_prompt`** 会并入主系统提示。**`user_input`** 在 `Sender` 内解析为 `ToolResult`；**CLI** 用 **`Ready to send`** 落实等待用户。
 
 ---
 
@@ -113,10 +101,10 @@ session.get_status(module_name, "Ready to send") == "ready"
 
 | 目标                          | 常见操作 |
 |-------------------------------|----------|
-| 允许 `Sender` 进入发送判断     | `session.set_need_loop(True)` |
+| 在完成前阻塞发送             | `set_status(self.name, "Ready to send", "pending")`，完成后 `"ready"` |
 | 暂停整条流水线                | `set_status(self.name, "Ready to send", "pending")` |
 | 释放你的模块门控             | `set_status(self.name, "Ready to send", "ready")` |
 | 监听“已进入待发送”时机        | `runtime.register_callback("sender_waiting", ...)` |
-| 控制模型看到的内容            | 在 context 中新增/更新 `Text` / `ProtectedText` / `ToolResult` |
+| 控制模型看到的内容            | 在 context 中新增/更新 `Text` / `UserText` / `SystemText` / `ProtectedText` / `ToolResult` |
 
 executor 与 logger 模块是通过 `Ready to send` 和 claimed regions 实现“干预”的两个具体例子；executor 侧的入门讲解见 [`executor.md`](executor.md)。

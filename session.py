@@ -16,7 +16,8 @@ class Session:
         self.loop_count = 0
         self.tick_count = 0
         self._loop_limit = Config.get("system", "runtime", {}).get("max_loops", 5)
-        self.NeedLoop = False
+        # After a user_input tool call; CLI uses this to hold Ready to send until the user types.
+        self.awaiting_user_input = False
 
     def add_context(self, content_type: str, data: str, module: str = None, claimed_since: int = None, info: dict = None, label: str = None):
         if len(self.context) >= self._max_context:
@@ -81,12 +82,6 @@ class Session:
                 del self.context[region_index]["module"]
             self.release_region(region_index)
 
-    def set_need_loop(self, value: bool = True):
-        self.NeedLoop = bool(value)
-
-    def needs_loop(self) -> bool:
-        return self.NeedLoop
-
     def to_dict(self):
         def convert(obj):
             if isinstance(obj, dict):
@@ -107,5 +102,5 @@ class Session:
             "claimed_regions": self._claimed_regions,
             "loop_count": self.loop_count,
             "tick_count": self.tick_count,
-            "need_loop": self.NeedLoop,
+            "awaiting_user_input": self.awaiting_user_input,
         }

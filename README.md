@@ -45,7 +45,7 @@ Ticking: Every `0.1` seconds by default (configurable in `/config/system.json`),
 
 Looping: A new loop starts at session start and after each sender completion (`Runtime.newloop(...)`), which runs each module's `on_loop()`.
 
-At a high level, modules interact, process context, and do non-LLM work. When modules are done, they mark `"Ready to send"` as `"ready"` (for example, `session.set_status(self.name, "Ready to send", "ready")`). At least one module must also trigger `session.set_need_loop(True)`. Then `sender` sees the trigger, verifies other modules are ready, sends `context` to the model, and appends the model result back into `context` (with automatic JSON segment detection).
+At a high level, modules interact, process context, and do non-LLM work. Each module marks `"Ready to send"` as `"ready"` or `"pending"` when it is or is not safe to call the model. The **CLI** owns the human-input gate: it stays `"pending"` until there is at least one `UserText` in context, and stays `"pending"` while `session.awaiting_user_input` is true after a `user_input` tool. **`file_system`**, **`executor`**, and **`logger`** go `"pending"` while tool work or claimed regions are in flight, and `"ready"` when clear. **`sender`** sends as soon as every other module is `"ready"` and its internal `pending_confirmation` latch is set (after each `newloop`). To wait for the user, the model emits the synthetic `user_input` tool (see `config/sender.json`).
 
 Many status and context conventions are not strictly enforced by the runtime. Follow conventions consistently and avoid directly interfering with another module's claimed work.
 

@@ -2,11 +2,12 @@
   "name": "system",
   "version": "1.0.0",
   "description": "ModularClaw system configuration",
+  "system_prompt": "Turn budget: Another model turn runs only after a valid tool call is processed or the user types in the CLI. To pause and wait for the user, call the user_input tool (see config/sender.json instructions). Plain text without a tool does not schedule another turn.",
   "runtime": {
     "tick_interval": 0.1,
     "max_sessions": 100,
     "ticks_per_loop": 99999,
-    "max_loops": 5
+    "max_loops": 300
   },
   "session": {
     "max_context_items": 1000,

@@ -17,7 +17,7 @@ At a high level, this project is an agent orchestration framework:
 - Stores conversation and tool data in a shared `Session` context
 - Lets an LLM module (`Sender`) read the context and produce responses
 - Lets an execution module (`Executor`) run shell commands requested via structured tool calls
-- Lets a file editing module (`FileEditor`) write, append, and replace text in project files
+- Lets a file system module (`FileSystem`, registered as `file_system`) handle `edit_file` tool calls (read/write, search, list, and related operations within configured path policy)
 - Feeds tool results back into context so the LLM can continue reasoning
 - Exposes live status, context, and logs over a small web dashboard (`Web`)
 
@@ -96,7 +96,7 @@ If no API key is configured, it returns a simulated response.
 - Rewrites the item as a `ToolResult` payload
 - Releases the claim and updates readiness
 
-### `FileEditor`
+### `FileSystem` (`file_system`)
 
 - Scans context for JSON tool calls:
 
@@ -108,11 +108,9 @@ If no API key is configured, it returns a simulated response.
 }
 ```
 
-- Supports simple actions designed for beginners:
-  - `write` (create/overwrite)
-  - `append` (add to end)
-  - `replace` (replace first matching text)
-- Returns a structured `tool_result` with `ok`, `message`, and `path`
+- Supports actions such as `read`, `write`, `append`, `replace`, `list`, `glob`, `search`, `rename`, `delete`, `mkdir`, and `metadata` (see [main/file-system.md](main/file-system.md))
+- Enforces `path_policy` from `config/file_system.json` (`write_scope`, roots, `allow_read_all_system`)
+- Returns a structured `tool_result` with `ok`, `message`, and `path` (and `content` when applicable)
 
 ### `Logger`
 
@@ -128,7 +126,7 @@ If no API key is configured, it returns a simulated response.
 
 All config lives in `config/` and is loaded by module name with version validation.
 
-### `config/System.json`
+### `config/system.json`
 
 - `runtime.tick_interval`: default sleep interval in run loops
 - `runtime.max_sessions`: max concurrent sessions (informational currently)
@@ -139,12 +137,12 @@ All config lives in `config/` and is loaded by module name with version validati
 
 ### Module configs
 
-- `config/CLI.json`
-- `config/Sender.json`
-- `config/Executor.json`
-- `config/Logger.json`
-- `config/Fileeditor.json`
-- `config/Web.json`
+- `config/cli.json`
+- `config/sender.json`
+- `config/executor.json`
+- `config/logger.json`
+- `config/file_system.json`
+- `config/web.json`
 
 Each includes a `version` that must match the module `VERSION` constant.
 
@@ -202,7 +200,7 @@ Register it with:
 runtime.register_module("mymodule", MyModule())
 ```
 
-Add `config/Mymodule.json` (capitalized file naming) with a matching `version`.
+Add `config/mymodule.json` (file stem matches the runtime registration name) with a matching `version`.
 
 ## API Reference
 

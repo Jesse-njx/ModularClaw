@@ -24,10 +24,19 @@ class CLI(Module):
     def on_loop(self, session: Session):
         self._current_session = session
 
+    def _has_user_text(self, session: Session) -> bool:
+        return any(item.get("type") == "UserText" for item in session.get_context())
+
     def on_tick(self, session: Session):
+        if session.awaiting_user_input:
+            session.set_status(self.name, "Ready to send", "pending")
+            return
+        if not self._has_user_text(session):
+            session.set_status(self.name, "Ready to send", "pending")
+            return
         context = session.get_context()
         has_claimed = any(session.is_claimed(i) for i in range(len(context)))
-        
+
         if not has_claimed:
             session.set_status(self.name, "Ready to send", "ready")
 
@@ -66,9 +75,9 @@ class CLI(Module):
                 session.append_log(f"[CLI] Error: {e}")
 
     def _process_input(self, user_input: str, session: Session):
-        session.add_context("Text", user_input)
+        session.awaiting_user_input = False
+        session.add_context("UserText", user_input)
         session.set_status(self.name, "user_message_ready", True)
-        session.set_need_loop(True)
         session.set_status(self.name, "Ready to send", "ready")
         session.append_log(f"[CLI] Added user message to session")
 

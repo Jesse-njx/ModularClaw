@@ -131,6 +131,8 @@ class Web(Module):
             border-radius: 10px;
             padding: 12px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            max-height: 70vh;
+            overflow-y: auto;
         }}
         .item {{
             padding: 8px;
@@ -139,6 +141,10 @@ class Web(Module):
             border-left: 3px solid #2f80ed;
             border-radius: 4px;
             word-break: break-word;
+        }}
+        .context-data {{
+            margin-top: 4px;
+            white-space: pre-wrap;
         }}
         .subtle {{ color: #637083; font-size: 12px; }}
         .log-entry {{ font-family: monospace; font-size: 12px; padding: 4px 0; border-bottom: 1px solid #eef1f4; }}
@@ -171,6 +177,7 @@ class Web(Module):
         let activeTab = "context";
         let latestPayload = null;
         let latestTick = -1;
+        let lastContextCount = 0;
 
         function escapeHtml(value) {{
             return String(value)
@@ -196,12 +203,11 @@ class Web(Module):
                 const ctxLabel = ctx.label ? escapeHtml(ctx.label) : "";
                 const labelBadge = ctxLabel ? ` <span class="subtle">(${{ctxLabel}})</span>` : "";
                 let data = String(ctx.data || "");
-                if (data.length > 400) data = data.slice(0, 400) + "...";
                 data = escapeHtml(data);
                 const module = ctx.module ? escapeHtml(ctx.module) : "";
                 const claimedSince = ctx.claimedSince !== undefined ? escapeHtml(ctx.claimedSince) : "";
                 const claimNote = module ? `<div class="subtle">claimed by ${{module}} since ${{claimedSince}}</div>` : "";
-                return `<div class="item"><strong>[${{ctxType}}]</strong>${{labelBadge}} ${{data}}${{claimNote}}</div>`;
+                return `<div class="item"><strong>[${{ctxType}}]</strong>${{labelBadge}}<div class="context-data">${{data}}</div>${{claimNote}}</div>`;
             }}).join("");
         }}
 
@@ -233,7 +239,13 @@ class Web(Module):
             tickEl.textContent = String(latestPayload.tick_count ?? 0);
 
             if (activeTab === "context") {{
+                const contextCount = (latestPayload.context || []).length;
+                const hasNewSections = contextCount > lastContextCount;
                 contentEl.innerHTML = renderContext(latestPayload);
+                if (hasNewSections) {{
+                    contentEl.scrollTop = contentEl.scrollHeight;
+                }}
+                lastContextCount = contextCount;
             }} else if (activeTab === "status") {{
                 contentEl.innerHTML = renderStatus(latestPayload);
             }} else {{

@@ -18,7 +18,7 @@ Class constant:
 - From config **`system.session`**: **`max_context_items`** (default `1000`), **`max_logs`** (default `5000`).
 - **`self.loop_count`**, **`self.tick_count`** — Initialized to `0`; typically updated by **`Runtime`**.
 - **`self._loop_limit`** — From **`system.runtime.max_loops`** (default `5`); reserved for callers that want a session-side notion of loop cap (the runtime uses its own `_max_loops` as well).
-- **`self.NeedLoop`** — Boolean flag; use **`set_need_loop`** / **`needs_loop`** so external drivers can decide whether to start another loop.
+- **`self.awaiting_user_input`** — When true (after a `user_input` tool), the **CLI** keeps `"Ready to send"` as `"pending"` until the user types another line.
 
 ---
 
@@ -97,20 +97,6 @@ Regions are **indices** into **`self.context`**. **`_claimed_regions`** maps ind
 
 ---
 
-## Loop control flag
-
-### `set_need_loop(self, value: bool = True)`
-
-- Sets **`self.NeedLoop = bool(value)`**.
-
-### `needs_loop(self) -> bool`
-
-- Returns **`self.NeedLoop`**.
-
-The runtime does **not** automatically read this flag; a driver or module logic is expected to consult it and call **`Runtime.newloop`** when appropriate.
-
----
-
 ## Serialization
 
 ### `to_dict(self) -> dict`
@@ -120,6 +106,6 @@ The runtime does **not** automatically read this flag; a driver or module logic 
   - Lists → recurse elements.
   - Objects with **`__dict__`** → **`str(obj)`** (string fallback, not a deep structure).
   - Scalars → returned as-is.
-- Returns a dict with: **`id`**, **`version`**, **`context`**, **`status_list`** (via **`convert`**), **`logs`**, **`claimed_regions`**, **`loop_count`**, **`tick_count`**, **`need_loop`** (`NeedLoop` serialized as **`need_loop`**).
+- Returns a dict with: **`id`**, **`version`**, **`context`**, **`status_list`** (via **`convert`**), **`logs`**, **`claimed_regions`**, **`loop_count`**, **`tick_count`**, **`awaiting_user_input`**.
 
 Use this for snapshots, APIs, or debugging; it is not guaranteed to round-trip arbitrary objects inside **`status_list`** beyond the **`convert`** rules above.

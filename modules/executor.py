@@ -56,7 +56,7 @@ class Executor(Module):
     
     def on_session_start(self, session: Session):
         if self._tool_prompt:
-            session.add_context("Text", self._tool_prompt)
+            session.add_context("SystemText", self._tool_prompt)
 
     def _handle_execute_command(self, session: Session, index: int, tool_call: dict):
         command = tool_call.get("arguments", {}).get("command")
@@ -74,7 +74,6 @@ class Executor(Module):
             })
             session.update_region(index, denied_data, "ToolResult")
             session.mark_claimed_region_finished(index, self.name)
-            session.set_need_loop(True)
             session.append_log(f"[{self.name}] Blocked command: {command} ({reason})")
             return
 
@@ -219,7 +218,6 @@ class Executor(Module):
                     })
                     session.update_region(index, new_data, "ToolResult")
                     session.mark_claimed_region_finished(index, self.name)
-                    session.set_need_loop(True)
                     session.append_log(f"[{self.name}] Finished executing, updated region {index}")
                     finished.append(key)
         

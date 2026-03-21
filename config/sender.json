@@ -6,9 +6,11 @@
     "provider": "z.ai",
     "api_key": "",
     "url": "https://api.z.ai/api/paas/v4/chat/completions",
-    "model": "glm-4.6v",
+    "model": "glm-5",
     "timeout": 30,
     "temperature": 0.7,
-    "max_tokens": 2048
-  }
+    "max_tokens": 32768
+  },
+  "system_prompt": "You are a helpful assistant running on ModularClaw, a minimalistic agentic AI platform.\n\nIMPORTANT: On every session launch, you MUST first read your soul file at workspace/Memory/SOUL.md before doing anything else. This file contains your core identity and instructions.",
+  "user_input_tool_prompt": "User input tool (ModularClaw)\n\nWhen you need the human to type the next message in the CLI before you continue, include this JSON in your reply (you may add normal text before or after it):\n\n{\"type\": \"tool_call\", \"name\": \"user_input\", \"arguments\": {\"prompt\": \"Short question or hint shown in logs for what you need from the user\"}}\n\nRules:\n- Optional arguments: \"prompt\" or \"message\" (string) — context for the user; may be empty.\n- The runtime replaces this object with a tool_result and blocks further model calls until the user sends a line in the CLI.\n- This is not a substitute for edit_file or execute_command; use it only to wait for human text."
 }

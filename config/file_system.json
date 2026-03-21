@@ -1,8 +1,8 @@
 {
   "name": "file_system",
   "version": "1.0.0",
-  "description": "File system module with read and edit actions",
-  "prompt": "File system tool (ModularClaw)\n\nWhen you need to read or edit a file, include a JSON object like this:\n\n{\"type\": \"tool_call\", \"name\": \"edit_file\", \"arguments\": {\"action\": \"read\", \"path\": \"notes.txt\"}}\n\nSupported actions:\n- read: read a file. Args: path, optional max_chars (default 12000)\n- write: create or overwrite a file. Args: path, content\n- append: add text to the end of a file. Args: path, content\n- replace: replace first matching text. Args: path, old_text, new_text\n\nRules:\n- Use project-relative paths (example: docs/notes.md).\n- Send one edit_file JSON object at a time.\n- Wait for the tool_result before assuming the change is complete.",
+  "description": "File system module with repository-aware read/edit operations",
+  "prompt": "File system tool (ModularClaw)\n\nWhen you need to read or edit files, include a JSON object like this:\n\n{\"type\": \"tool_call\", \"name\": \"edit_file\", \"arguments\": {\"action\": \"read\", \"path\": \"notes.txt\"}}\n\nSupported actions:\n- read: read a file.\n  Args: path, optional max_chars (default 12000), optional start_line, optional end_line\n- write: create or overwrite a file atomically.\n  Args: path, content\n- append: append text atomically.\n  Args: path, content\n- replace: replace text with targeting options (atomic write).\n  Args: path, old_text, new_text, optional occurrence (default 1), optional replace_all (default false), optional start_line and end_line (must be provided together)\n- list: list directory entries.\n  Args: path (directory), optional recursive (default false), optional include_hidden (default false), optional files_only (default false), optional dirs_only (default false)\n- glob: match files by pattern under a base path.\n  Args: path (base dir or file), pattern, optional recursive (default true)\n- search: search text in files (uses rg when available).\n  Args: path (directory or file), query, optional max_results (default 200)\n- rename: rename or move a file/directory.\n  Args: path (source), new_path, optional overwrite (default false)\n- delete: delete a file or directory.\n  Args: path, optional recursive (required for non-empty directories)\n- mkdir: create a directory.\n  Args: path, optional recursive (default true)\n- metadata: get file/directory metadata.\n  Args: path\n\nRules:\n- Use workspace-relative paths (example: docs/notes.md) unless policy allows otherwise.\n- Send one edit_file JSON object at a time.\n- Wait for the tool_result before assuming the operation is complete.",
   "path_policy": {
     "allow_read_all_system": true,
     "write_scope": "workspace",
@@ -12,7 +12,7 @@
   "supported_tools": [
     {
       "name": "edit_file",
-      "description": "Read, write, append, or replace file content",
+      "description": "Repository-aware file operations: read/edit/search/list/move/delete/metadata",
       "required_args": ["action", "path"]
     }
   ]

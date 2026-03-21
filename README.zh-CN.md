@@ -43,7 +43,7 @@ Ticking：默认每 `0.1` 秒一次（可在 `/config/system.json` 配置），R
 
 Looping：会话启动时会开始一个新 loop；每次 `sender` 完成后也会触发新的 loop（`Runtime.newloop(...)`），并调用每个模块的 `on_loop()`。
 
-整体逻辑是：模块之间协作、处理 context、完成非 LLM 的工作。当模块处理完成后，会把 `"Ready to send"` 置为 `"ready"`（例如 `session.set_status(self.name, "Ready to send", "ready")`）。同时至少要有一个模块触发 `session.set_need_loop(True)`。随后 `sender` 会看到这个触发信号，检查其他模块是否 ready，把 `context` 发给模型，并将模型结果追加回 `context`（支持自动 JSON 分段检测）。
+整体逻辑是：模块之间协作、处理 context、完成非 LLM 的工作。各模块用 `"Ready to send"` 的 `"ready"` / `"pending"` 表示当前是否适合调用模型。**CLI** 负责与人相关的门控：在 context 中尚未出现 `UserText` 时保持 `"pending"`；在 `user_input` 工具执行后 `session.awaiting_user_input` 为真时也保持 `"pending"`，直到用户再次输入。**`file_system`**、**`executor`**、**`logger`** 在工具执行或 claimed 区域未清完时为 `"pending"`，完成后为 `"ready"`。**`sender`** 在其余模块均为 `"ready"` 且自身 `pending_confirmation` 已上闩时立即发送（每次 `newloop` 后上闩）。若模型需要等待用户，应发出 `user_input` 工具调用（见 `config/sender.json`）。
 
 很多状态和 context 约定并不是由 Runtime 严格强制的。请尽量遵守约定，不要直接干扰其他模块已声明（claimed）的工作区域。
 
