@@ -3,7 +3,7 @@ from config_loader import Config
 
 
 class Session:
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(self, id: str):
         self.id = id

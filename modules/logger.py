@@ -3,7 +3,7 @@ from session import Session
 
 
 class Logger(Module):
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
     
     def on_tick(self, session: Session):
         self._check_and_log_status_changes(session)

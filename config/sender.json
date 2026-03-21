@@ -1,16 +1,34 @@
 {
   "name": "sender",
-  "version": "1.0.0",
-  "description": "AI communication module - sends session to LLM and receives responses",
-  "api": {
-    "provider": "z.ai",
-    "api_key": "",
-    "url": "https://api.z.ai/api/paas/v4/chat/completions",
-    "model": "glm-5",
-    "timeout": 30,
-    "temperature": 0.7,
-    "max_tokens": 32768
-  },
+  "version": "1.1.0",
+  "description": "AI communication module - sends session to LLM and receives responses. context_upstream_blacklist: context rows matching type (and optional label) are omitted from the chat API request. Session session_1774112391404 used SenderApiPart labels response_meta, usage, choice.finish_reason, choice.index, assistant.reasoning_content — blocking type SenderApiPart excludes all of these.",
+  "context_upstream_blacklist": [
+    { "type": "SenderApiEnvelope" },
+    { "type": "SenderApiPart" }
+  ],
+  "apis": [
+    {
+      "id": "glm-5",
+      "provider": "z.ai",
+      "api_key": "",
+      "url": "https://api.z.ai/api/paas/v4/chat/completions",
+      "model": "glm-5",
+      "timeout": 120,
+      "temperature": 0.7,
+      "max_tokens": 32768
+    },
+    {
+      "id": "deepseek-v32",
+      "provider": "deepseek",
+      "api_key": "",
+      "url": "https://api.deepseek.com/chat/completions",
+      "model": "deepseek-chat",
+      "timeout": 120,
+      "temperature": 0.7,
+      "max_tokens": 8192
+    }
+  ],
+  "selected_model": "deepseek-v32",
   "system_prompt": "You are a helpful assistant running on ModularClaw, a minimalistic agentic AI platform.\n\nIMPORTANT: On every session launch, you MUST first read your soul file at workspace/Memory/SOUL.md before doing anything else. This file contains your core identity and instructions.",
   "user_input_tool_prompt": "User input tool (ModularClaw)\n\nWhen you need the human to type the next message in the CLI before you continue, include this JSON in your reply (you may add normal text before or after it):\n\n{\"type\": \"tool_call\", \"name\": \"user_input\", \"arguments\": {\"prompt\": \"Short question or hint shown in logs for what you need from the user\"}}\n\nRules:\n- Optional arguments: \"prompt\" or \"message\" (string) — context for the user; may be empty.\n- The runtime replaces this object with a tool_result and blocks further model calls until the user sends a line in the CLI.\n- This is not a substitute for edit_file or execute_command; use it only to wait for human text."
 }

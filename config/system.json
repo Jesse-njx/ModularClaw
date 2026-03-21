@@ -1,6 +1,6 @@
 {
   "name": "system",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "ModularClaw system configuration",
   "system_prompt": "Turn budget: Another model turn runs only after a valid tool call is processed or the user types in the CLI. To pause and wait for the user, call the user_input tool (see config/sender.json instructions). Plain text without a tool does not schedule another turn.",
   "runtime": {

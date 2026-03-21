@@ -12,7 +12,7 @@ from session import Session
 class FileSystem(Module):
     """File system tool module used by the runtime."""
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(self):
         super().__init__()

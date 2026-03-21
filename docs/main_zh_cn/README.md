@@ -5,3 +5,4 @@
 - **[Sender](sender.md)** — `modules/sender.py`：门控机制、状态键，以及它如何与其他模块协作。
 - **[Executor](executor.md)** — `modules/executor.py`：简明说明及其如何影响 Sender。
 - **[File system](file-system.md)** — `modules/file_system.py`：`edit_file` 工具（读写、搜索、列表、路径策略）。
+- **[Memory](memory.md)** — `modules/memory.py`：`save_memory` / `search_memory` 工具（`workspace/Memory/` 下持久化片段）。

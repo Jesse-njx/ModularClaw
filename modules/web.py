@@ -6,6 +6,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from core import Module, Runtime
 from config_loader import Config
 from session import Session
+from modules.sender import _context_blocked_from_upstream
 
 
 class StatusHandler(BaseHTTPRequestHandler):
@@ -68,7 +69,7 @@ class StatusHandler(BaseHTTPRequestHandler):
 
 
 class Web(Module):
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(self, port: int = None, host: str = None):
         super().__init__()
@@ -77,6 +78,28 @@ class Web(Module):
         self.host = host or web_config.get("host", "localhost")
         self._server = None
         self._thread = None
+
+        raw_bl = Config.get("web", "context_display_blacklist", None)
+        if isinstance(raw_bl, list):
+            self._context_display_blacklist = raw_bl
+        else:
+            self._context_display_blacklist = [
+                {"type": "SenderApiEnvelope"},
+                {"type": "SenderApiPart"},
+            ]
+
+    def _context_for_display(self, session: Session) -> list:
+        """Omit blacklisted context rows from dashboard/API (same semantics as sender upstream blacklist)."""
+        out: list = []
+        for row in session.get_context():
+            if not isinstance(row, dict):
+                continue
+            if _context_blocked_from_upstream(
+                row.get("type"), row.get("label"), self._context_display_blacklist
+            ):
+                continue
+            out.append(row)
+        return out
 
     def on_loop(self, session: Session):
         if self._server is None:
@@ -93,13 +116,55 @@ class Web(Module):
         self._thread.start()
         print(f"[Web] Status page available at http://{self.host}:{self.port}")
 
+    # Keys written by modules/sender._apply_completion_envelope_to_sender_status
+    _SENDER_USAGE_KEYS = (
+        "last_model",
+        "last_usage",
+        "last_finish_reason",
+        "last_id",
+        "last_request_id",
+        "last_created",
+        "last_object",
+        "last_choice_index",
+        "last_message_role",
+        "last_error",
+    )
+
+    def _sender_status_view(self, session: Session) -> dict:
+        """Parse sender module status (from sender.py) for API / UI."""
+        raw = session.get_status("sender")
+        if not isinstance(raw, dict):
+            raw = {}
+        out = {k: raw.get(k) or "" for k in self._SENDER_USAGE_KEYS}
+        out["tokens"] = None
+        usage_raw = raw.get("last_usage")
+        if usage_raw:
+            try:
+                u = json.loads(usage_raw) if isinstance(usage_raw, str) else usage_raw
+            except (json.JSONDecodeError, TypeError):
+                u = None
+            if isinstance(u, dict):
+                details = u.get("completion_tokens_details") or {}
+                reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
+                pd = u.get("prompt_tokens_details") or {}
+                cached = pd.get("cached_tokens") if isinstance(pd, dict) else None
+                out["tokens"] = {
+                    "prompt": u.get("prompt_tokens"),
+                    "completion": u.get("completion_tokens"),
+                    "total": u.get("total_tokens"),
+                    "reasoning": reasoning,
+                    "cached": cached,
+                }
+        return out
+
     def _session_payload(self, session: Session) -> dict:
         return {
             "id": session.id,
             "loop_count": session.loop_count,
             "tick_count": session.tick_count,
             "statuses": session.get_all_statuses(),
-            "context": session.get_context(),
+            "sender": self._sender_status_view(session),
+            "context": self._context_for_display(session),
             "logs": session.logs[-100:],
             "total_logs": len(session.logs),
         }
@@ -152,11 +217,31 @@ class Web(Module):
         .status-group {{ margin-bottom: 10px; }}
         .status-title {{ font-weight: 700; margin: 6px 0; }}
         .status-line {{ margin-left: 12px; padding: 2px 0; }}
+        .sender-strip {{
+            margin: 0 0 12px 0;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #333;
+        }}
+        .sender-strip strong {{ color: #111; }}
+        .sender-card {{
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #f0f6ff;
+            border: 1px solid #cfe0fc;
+            border-radius: 10px;
+        }}
+        .sender-card h3 {{ margin: 0 0 8px 0; font-size: 15px; color: #1e3a5f; }}
+        .token-row {{ font-family: monospace; font-size: 13px; margin-top: 6px; color: #333; }}
     </style>
 </head>
 <body>
     <h1>Session Status: {session_id}</h1>
     <p class="meta">Loop: <span id="loopCount">0</span> | Tick: <span id="tickCount">0</span></p>
+    <div class="sender-strip" id="senderStrip" style="display:none;"></div>
 
     <div class="tabs">
         <button class="tab-btn active" data-tab="context">Context</button>
@@ -171,12 +256,12 @@ class Web(Module):
         const contentEl = document.getElementById("tabContent");
         const loopEl = document.getElementById("loopCount");
         const tickEl = document.getElementById("tickCount");
+        const senderStripEl = document.getElementById("senderStrip");
         const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
         const tabs = ["context", "status", "logs"];
 
         let activeTab = "context";
         let latestPayload = null;
-        let latestTick = -1;
         let lastContextCount = 0;
 
         function escapeHtml(value) {{
@@ -211,17 +296,77 @@ class Web(Module):
             }}).join("");
         }}
 
+        function formatTokens(tok) {{
+            if (!tok || typeof tok !== "object") return "";
+            const parts = [];
+            if (tok.prompt != null) parts.push(`prompt ${{tok.prompt}}`);
+            if (tok.completion != null) parts.push(`completion ${{tok.completion}}`);
+            if (tok.total != null) parts.push(`total ${{tok.total}}`);
+            if (tok.reasoning != null) parts.push(`reasoning ${{tok.reasoning}}`);
+            if (tok.cached != null) parts.push(`cached ${{tok.cached}}`);
+            return parts.length ? parts.join(" · ") : "";
+        }}
+
+        function renderSenderStrip(sender) {{
+            if (!senderStripEl) return;
+            const model = (sender && sender.last_model) ? String(sender.last_model) : "";
+            const tokLine = formatTokens(sender && sender.tokens);
+            const err = sender && sender.last_error ? String(sender.last_error) : "";
+            if (!model && !tokLine && !err) {{
+                senderStripEl.style.display = "none";
+                senderStripEl.innerHTML = "";
+                return;
+            }}
+            senderStripEl.style.display = "block";
+            let html = "";
+            if (model) html += `<strong>Model</strong> ${{escapeHtml(model)}}`;
+            if (tokLine) html += (html ? " &nbsp;|&nbsp; " : "") + `<strong>Tokens</strong> ${{escapeHtml(tokLine)}}`;
+            if (err) html += (html ? "<br>" : "") + `<span style="color:#b42318;"><strong>Error</strong> ${{escapeHtml(err)}}</span>`;
+            senderStripEl.innerHTML = html;
+        }}
+
+        function renderSenderCard(sender) {{
+            const s = sender || {{}};
+            const hasData = !!(s.last_model || s.last_id || s.last_error
+                || (s.tokens && (s.tokens.total != null || s.tokens.prompt != null || s.tokens.completion != null)));
+            if (!hasData) return '<div class="subtle">No sender status yet (waiting for first API response).</div>';
+            const model = s.last_model ? escapeHtml(s.last_model) : "—";
+            const tokLine = formatTokens(s.tokens);
+            const fr = s.last_finish_reason ? escapeHtml(s.last_finish_reason) : "—";
+            const lid = s.last_id ? escapeHtml(s.last_id) : "—";
+            const rid = s.last_request_id ? escapeHtml(s.last_request_id) : "";
+            const created = s.last_created ? escapeHtml(s.last_created) : "";
+            const obj = s.last_object ? escapeHtml(s.last_object) : "";
+            const idx = s.last_choice_index ? escapeHtml(s.last_choice_index) : "";
+            const role = s.last_message_role ? escapeHtml(s.last_message_role) : "";
+            const err = s.last_error ? escapeHtml(s.last_error) : "";
+            let html = `<div class="sender-card"><h3>Sender (from session status)</h3>`;
+            html += `<div class="status-line"><strong>last_model:</strong> ${{model}}</div>`;
+            html += `<div class="token-row">${{tokLine ? escapeHtml(tokLine) : "<span class=\\"subtle\\">No usage recorded yet</span>"}}</div>`;
+            html += `<div class="status-line"><strong>last_finish_reason:</strong> ${{fr}}</div>`;
+            html += `<div class="status-line"><strong>last_id:</strong> ${{lid}}</div>`;
+            if (rid) html += `<div class="status-line"><strong>last_request_id:</strong> ${{rid}}</div>`;
+            if (created) html += `<div class="status-line"><strong>last_created:</strong> ${{created}}</div>`;
+            if (obj) html += `<div class="status-line"><strong>last_object:</strong> ${{obj}}</div>`;
+            if (idx !== "") html += `<div class="status-line"><strong>last_choice_index:</strong> ${{idx}}</div>`;
+            if (role) html += `<div class="status-line"><strong>last_message_role:</strong> ${{role}}</div>`;
+            if (err) html += `<div class="status-line" style="color:#b42318;"><strong>last_error:</strong> ${{err}}</div>`;
+            html += `</div>`;
+            return html;
+        }}
+
         function renderStatus(payload) {{
+            const senderHtml = renderSenderCard(payload.sender || null);
             const statuses = payload.statuses || {{}};
-            const modules = Object.keys(statuses);
-            if (!modules.length) return '<div class="empty">No status updates yet</div>';
-            return modules.map((moduleName) => {{
+            const modules = Object.keys(statuses).filter((m) => m !== "sender");
+            const rest = modules.map((moduleName) => {{
                 const moduleStatuses = statuses[moduleName] || {{}};
                 const lines = Object.entries(moduleStatuses).map(([key, value]) => {{
                     return `<div class="status-line"><strong>${{escapeHtml(key)}}:</strong> ${{escapeHtml(value)}}</div>`;
                 }}).join("");
                 return `<div class="status-group"><div class="status-title">Module: ${{escapeHtml(moduleName)}}</div>${{lines || '<div class="subtle">No details</div>'}}</div>`;
             }}).join("");
+            return senderHtml + rest;
         }}
 
         function renderLogs(payload) {{
@@ -237,6 +382,7 @@ class Web(Module):
             }}
             loopEl.textContent = String(latestPayload.loop_count ?? 0);
             tickEl.textContent = String(latestPayload.tick_count ?? 0);
+            renderSenderStrip(latestPayload.sender || null);
 
             if (activeTab === "context") {{
                 const contextCount = (latestPayload.context || []).length;
@@ -260,12 +406,7 @@ class Web(Module):
                 if (!response.ok) throw new Error("Failed to load session");
                 const payload = await response.json();
                 latestPayload = payload;
-                if (payload.tick_count !== latestTick) {{
-                    latestTick = payload.tick_count;
-                    render();
-                }} else if (!contentEl.innerHTML) {{
-                    render();
-                }}
+                render();
             }} catch (err) {{
                 contentEl.innerHTML = `<div class="empty">Unable to load session data: ${{escapeHtml(err.message)}}</div>`;
             }}

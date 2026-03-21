@@ -107,4 +107,4 @@ Constructor pulls defaults from `Config.get("sender", "api", {})`: API URL, mode
 | React when a loop arms send | `runtime.register_callback("sender_waiting", ...)` |
 | Control what the model sees   | Add/update `Text` / `UserText` / `SystemText` / `ProtectedText` / `ToolResult` in context |
 
-The executor and logger modules are two concrete examples of “interference” via `Ready to send` and claimed regions; see [`executor.md`](executor.md) for the beginner-oriented walkthrough of the executor side.
+The executor, logger, and memory modules are concrete examples of “interference” via `Ready to send` and claimed regions; see [`executor.md`](executor.md) for the beginner-oriented walkthrough of the executor side, and [`memory.md`](memory.md) for persistent snippet tools.

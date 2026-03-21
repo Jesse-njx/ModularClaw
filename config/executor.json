@@ -1,6 +1,6 @@
 {
   "name": "executor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Terminal command execution module",
   "prompt": "Execution tool (ModularClaw)\n\nWhen you need to run a shell command on the host, include a JSON object with this shape in your reply (you may add normal text before or after it):\n\n{\"type\": \"tool_call\", \"name\": \"execute_command\", \"arguments\": {\"command\": \"your shell command here\"}}\n\nRules:\n- \"command\" is a single string passed to bash (shell execution). Chain steps with &&, ;, or pipes inside that string.\n- The runtime extracts balanced {...} or [...] regions and validates them as JSON; you do not need code fences, but if you use them the JSON inside must still be valid.\n- After the command finishes, your previous JSON region is replaced by a tool result (stdout on success, stderr on failure, plus returncode). Wait for that before assuming the command ran.\n- Commands are subject to a configured timeout; long jobs may be cut off with a timeout error.\n- Send one execute_command per JSON object; issue another message if you need a follow-up command.",
   "execution": {

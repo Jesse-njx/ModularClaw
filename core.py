@@ -8,7 +8,7 @@ from config_loader import Config, VersionMismatchError, NameConflictError
 
 
 class Runtime:
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(self):
         self.modules = {}
@@ -180,7 +180,7 @@ class Runtime:
 
 
 class Module:
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def __init__(self):
         self._runtime = None

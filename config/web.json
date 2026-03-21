@@ -1,7 +1,14 @@
 {
   "name": "web",
-  "version": "1.0.0",
-  "description": "Web status page module",
+  "version": "1.1.0",
+  "description": "Web status page module. context_display_blacklist: context rows matching type (and optional label) are omitted from the Context tab and /api/session JSON (same rule shape as sender.context_upstream_blacklist).",
+  "context_display_blacklist": [
+    { "type": "SenderApiEnvelope" },
+    { "type": "SenderApiPart", "label": "response_meta" },
+    { "type": "SenderApiPart", "label": "usage" },
+    { "type": "SenderApiPart", "label": "choice.finish_reason" },
+    { "type": "SenderApiPart", "label": "choice.index" }
+  ],
   "server": {
     "host": "localhost",
     "port": 8080

@@ -107,4 +107,4 @@ session.get_status(module_name, "Ready to send") == "ready"
 | 监听“已进入待发送”时机        | `runtime.register_callback("sender_waiting", ...)` |
 | 控制模型看到的内容            | 在 context 中新增/更新 `Text` / `UserText` / `SystemText` / `ProtectedText` / `ToolResult` |
 
-executor 与 logger 模块是通过 `Ready to send` 和 claimed regions 实现“干预”的两个具体例子；executor 侧的入门讲解见 [`executor.md`](executor.md)。
+executor、logger、memory 模块都是通过 `Ready to send` 与 claimed regions 实现“干预”的具体例子；executor 入门见 [`executor.md`](executor.md)，持久化片段工具见 [`memory.md`](memory.md)。

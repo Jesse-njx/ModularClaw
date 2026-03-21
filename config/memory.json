@@ -1,0 +1,25 @@
+{
+  "name": "memory",
+  "version": "1.1.0",
+  "description": "Persistent text memory: save and search snippets via tool calls (workspace/Memory/memories.json).",
+  "prompt": "Memory tools (ModularClaw)\n\nTo store a note for later, include JSON like:\n{\"type\": \"tool_call\", \"name\": \"save_memory\", \"arguments\": {\"content\": \"text to remember\", \"tags\": [\"optional\"], \"importance\": 3, \"metadata\": {}}}\n\nTo retrieve notes, include:\n{\"type\": \"tool_call\", \"name\": \"search_memory\", \"arguments\": {\"query\": \"substring\", \"tags\": [\"filter\"], \"max_results\": 10}}\n\nRules:\n- save_memory requires \"content\" (string).\n- search_memory: omit both query and tags to get the most recent entries (up to max_results).\n- Send one tool JSON object per call; wait for the tool_result before assuming it ran.",
+  "path_policy": {
+    "workspace_root": ""
+  },
+  "storage": {
+    "relative_dir": "Memory",
+    "memories_file": "memories.json"
+  },
+  "supported_tools": [
+    {
+      "name": "save_memory",
+      "description": "Save a text memory with optional tags and importance (1–5)",
+      "required_args": ["content"]
+    },
+    {
+      "name": "search_memory",
+      "description": "Search memories by query substring and/or tags, or list recent",
+      "required_args": []
+    }
+  ]
+}
