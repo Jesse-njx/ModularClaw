@@ -23,7 +23,7 @@ Then start it with:
 ```bash
 python run_cli.py
 ```
-Then open the status page shown in the CLI output (usually `http://localhost:8080`). The CLI itself does not stream full backend state, so use the web page to inspect context/status/logs.
+Then open the status URL shown in the CLI output (with `run_cli.py`, usually `http://localhost:8080/session/<session_id>`). The CLI itself does not stream full backend state, so use the web page to inspect context/status/logs.
 
 # Architecture
 
@@ -62,7 +62,7 @@ Use this quick pattern:
 3. Give it a `VERSION` string
 4. Implement `on_tick()` (and optionally `on_loop()` / `on_session_start()`)
 5. Add a matching config file in `config/` with the same version
-6. Register it in your runtime
+6. Ensure the runtime loads your module (automatic for `run_cli.py`; see Step 3)
 
 ## Step 1: Create your module file
 
@@ -102,6 +102,10 @@ The `version` must match your class `VERSION`, or startup will fail.
 
 ## Step 3: Register your module
 
+**If you use this repo’s entry points (`python run_cli.py` or `python -m modules.cli`):** you normally **do not** write any registration code. Both call `Runtime.auto_register_modules("modules")` (see `run_cli.py` and `modules/cli.py`), which imports each `modules/*.py` whose name does not start with `_` and registers the single `Module` subclass found there. Putting `modules/my_module.py` and `config/my_module.json` in place is enough.
+
+**If you embed `Runtime` in your own program:** register where you build the runtime—typically right after `runtime = Runtime()` and before `create_session`, either by calling `register_module` for each module or by `auto_register_modules("modules")` if you keep using the `modules/` package layout:
+
 ```python
 from core import Runtime
 from modules.my_module import MyModule
@@ -110,12 +114,12 @@ runtime = Runtime()
 runtime.register_module("my_module", MyModule())
 ```
 
-Important naming rule: the string in `register_module("my_module", ...)` must exactly match the module file name (`my_module.py`).
+Important naming rule: the string in `register_module("my_module", ...)` must exactly match the module file name stem (`my_module.py` → `"my_module"`). The same rule applies to auto-registration: the runtime name is the file name without `.py`.
 
 ## Step 4: Run and verify
 
 - Start the runtime (`python run_cli.py` in this repo)
-- Open `http://localhost:8080`
+- Open the status URL printed in the terminal (usually `http://localhost:8080/session/<session_id>`; `/` shows the first session if you only have one)
 - Check your module status and logs
 
 If your module is registered correctly, you should see it in the dashboard and logs on each loop/tick.
